@@ -1,375 +1,476 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>九大植物人格 | 深度鑑定報告</title>
-<script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com/)"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;700&family=Noto+Serif+TC:wght@700&display=swap" rel="stylesheet">
-<style>
-:root { --forest-dark: #121f12; --forest-mid: #1d331d; --accent: #d4af37; --text-light: #e0e0e0; }
-body {
-font-family: 'Noto Sans TC', sans-serif;
-background-color: var(--forest-dark);
-background-image: radial-gradient(circle at center, #1d331d 0%, #121f12 100%);
-color: var(--text-light); margin: 0; overflow-x: hidden;
-}
-.serif { font-family: 'Noto Serif TC', serif; }
-.adventure-container { max-width: 500px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>九大植物人格 | 深度鑑定報告</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;700&family=Noto+Serif+TC:wght@700&display=swap" rel="stylesheet">
+    
+    <!-- Firebase 數據收集引擎 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, addDoc, getDocs, getDoc, setDoc, deleteDoc, serverTimestamp, increment } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-```
-    /* 封面視覺 - 強調冒險儀式感 */
-    .cover-overlay { padding: 80px 30px; text-align: center; }
-    .adventure-title { font-size: 2.8rem; line-height: 1.3; color: var(--accent); text-shadow: 2px 2px 10px rgba(0,0,0,0.5); }
-    .start-btn {
-        background: linear-gradient(135deg, #d4af37 0%, #b8860b 100%);
-        color: #1a2e1a; padding: 22px; border-radius: 50px;
-        font-weight: 900; font-size: 1.4rem;
-        box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3);
-        transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-        border: none; cursor: pointer;
-    }
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'plant-personality-quiz';
 
-    /* 題目選項 */
-    .option-btn {
-        background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-        border-radius: 16px; padding: 18px; margin-bottom: 12px;
-        transition: all 0.2s; text-align: left; width: 100%; color: #fff;
-    }
-    .option-btn:active { background: var(--accent); color: #1a2e1a; }
+        // 偵測來源平台
+        function getSourcePlatform() {
+            const ref = document.referrer;
+            if (!ref) return "直接進入/Line";
+            if (ref.includes("facebook.com")) return "Facebook";
+            if (ref.includes("instagram.com")) return "Instagram";
+            if (ref.includes("google.com")) return "Google";
+            if (ref.includes("threads.net")) return "Threads";
+            return "其他平台";
+        }
 
-    /* 進度條 */
-    .progress-track { height: 4px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 40px; }
-    .progress-bar { height: 100%; background: var(--accent); border-radius: 10px; transition: width 0.4s; }
+        async function initAuthAndTrack() {
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
 
-    /* 結果鑑定書樣式 */
-    #capture-area {
-        background: linear-gradient(180deg, #ffffff 0%, #f9f6f2 100%);
-        color: #333; border-radius: 30px; position: relative;
-        box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-        overflow: hidden;
-    }
-    .quote-box { border-left: 3px solid var(--accent); padding-left: 15px; margin: 20px 0; }
-    .oil-tag {
-        display: inline-block; background: #f0e6cc; color: #8a6d1a;
-        padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold;
-        letter-spacing: 1px;
-    }
+                const platform = getSourcePlatform();
+                const updates = { 
+                    visitCount: increment(1),
+                    [`platform_${platform}`]: increment(1)
+                };
+                // 更新總統計與當週統計
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'total'), updates, { merge: true });
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'weekly'), updates, { merge: true });
+            } catch (e) { console.error("Init Error:", e); }
+        }
+        initAuthAndTrack();
 
-    .success-modal {
-        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-        background: rgba(26, 46, 26, 0.95); border: 1px solid var(--accent);
-        padding: 30px; border-radius: 24px; text-align: center; z-index: 100;
-        backdrop-filter: blur(10px); width: 80%;
-    }
+        // 數據保存：完成測驗 (重複也算)
+        window.apiSaveData = async (data) => {
+            if (!auth.currentUser) return;
+            const platform = getSourcePlatform();
+            try {
+                const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'quiz_results');
+                await addDoc(colRef, { ...data, platform, updatedAt: serverTimestamp() });
 
-    /* 冒險續章按鈕 - 去銷售感設計 */
-    .adventure-invite-btn {
-        background: rgba(255,255,255,0.02);
-        border: 1px dashed rgba(212, 175, 55, 0.3);
-        color: var(--accent);
-        padding: 18px; border-radius: 20px;
-        font-size: 0.85rem; letter-spacing: 0.15em;
-        text-align: center; display: block;
-        transition: all 0.3s;
-        text-decoration: none;
-        margin-top: 10px;
-    }
-    .adventure-invite-btn:hover {
-        background: rgba(212, 175, 55, 0.08);
-        border: 1px solid var(--accent);
-    }
+                const updates = { 
+                    completeCount: increment(1),
+                    [`type_${data.resultType}`]: increment(1)
+                };
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'total'), updates, { merge: true });
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'weekly'), updates, { merge: true });
+            } catch (e) { console.error("Save Error:", e); }
+        };
 
-    .back-btn-ui {
-        background: transparent; border: 1px solid rgba(255,255,255,0.2);
-        color: rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 30px;
-        font-size: 0.7rem; margin-top: 15px; cursor: pointer; align-self: center;
-    }
+        // 統計報名表點擊人次
+        window.apiTrackFormClick = async () => {
+            if (!auth.currentUser) return;
+            try {
+                const updates = { formClickCount: increment(1) };
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'total'), updates, { merge: true });
+                await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'weekly'), updates, { merge: true });
+            } catch (e) { console.error("Click Tracking Error:", e); }
+        };
 
-    /* 重新測驗按鈕 */
-    .reset-btn {
-        background: transparent; border: 1px solid rgba(255,255,255,0.1);
-        color: rgba(255,255,255,0.3); padding: 12px; border-radius: 15px;
-        font-size: 0.75rem; width: 100%; margin-top: 20px;
-        letter-spacing: 0.1em; cursor: pointer;
-        transition: all 0.3s;
-    }
-    .reset-btn:hover { color: var(--text-light); border-color: rgba(255,255,255,0.3); }
+        window.apiFetchAdminData = async () => {
+            try {
+                const resultsSnap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'quiz_results'));
+                const totalSnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'total'));
+                const weeklySnap = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'stats_summary', 'weekly'));
+                return {
+                    results: resultsSnap.docs.map(d => d.data()),
+                    totalStats: totalSnap.exists() ? totalSnap.data() : {},
+                    weeklyStats: weeklySnap.exists() ? weeklySnap.data() : {}
+                };
+            } catch (e) { return { results: [], totalStats: {}, weeklyStats: {} }; }
+        };
 
-    .hidden { display: none; }
-</style>
-```
+        // 修改後的清空邏輯：只刪除名單，不重置統計看板
+        window.apiClearWeeklyData = async () => {
+            try {
+                const snap = await getDocs(collection(db, 'artifacts', appId, 'public', 'data', 'quiz_results'));
+                const deletePromises = snap.docs.map(d => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'quiz_results', d.id)));
+                await Promise.all(deletePromises);
+                // 注意：這裡移除了對 stats_summary 的重置，確保看板數據不清空
+                return true;
+            } catch (e) { return false; }
+        };
+    </script>
 
+    <style>
+        :root { --forest-dark: #121f12; --forest-mid: #1d331d; --accent: #d4af37; --text-light: #e0e0e0; }
+        body { 
+            font-family: 'Noto Sans TC', sans-serif; 
+            background-color: var(--forest-dark); 
+            background-image: radial-gradient(circle at center, #1d331d 0%, #121f12 100%);
+            color: var(--text-light); margin: 0; overflow-x: hidden;
+        }
+        .serif { font-family: 'Noto Serif TC', serif; }
+        .adventure-container { max-width: 500px; margin: 0 auto; min-height: 100vh; display: flex; flex-direction: column; position: relative; }
+        
+        /* 原始封面樣式保持不變 */
+        .cover-overlay { padding: 80px 30px; text-align: center; }
+        .adventure-title { font-size: 2.8rem; line-height: 1.3; color: var(--accent); text-shadow: 2px 2px 10px rgba(0,0,0,0.5); }
+        .start-btn {
+            background: linear-gradient(135deg, #d4af37 0%, #b8860b 100%);
+            color: #1a2e1a; padding: 22px; border-radius: 50px;
+            font-weight: 900; font-size: 1.4rem;
+            box-shadow: 0 10px 25px rgba(212, 175, 55, 0.3);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: none; cursor: pointer;
+        }
+        .option-btn { 
+            background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); 
+            border-radius: 16px; padding: 18px; margin-bottom: 12px; width: 100%; text-align: left; color: #fff;
+        }
+        .option-btn:active { background: var(--accent); color: #1a2e1a; }
+        .progress-track { height: 4px; background: rgba(255,255,255,0.1); border-radius: 10px; margin-bottom: 40px; }
+        .progress-bar { height: 100%; background: var(--accent); border-radius: 10px; transition: width 0.4s; }
+        #capture-area { 
+            background: linear-gradient(180deg, #ffffff 0%, #f9f6f2 100%); 
+            color: #333; border-radius: 30px; position: relative;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.4); overflow: hidden;
+        }
+        .quote-box { border-left: 3px solid var(--accent); padding-left: 15px; margin: 20px 0; }
+        .oil-tag { display: inline-block; background: #f0e6cc; color: #8a6d1a; padding: 4px 12px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+        
+        .admin-trigger-button {
+            position: absolute; top: 15px; right: 15px;
+            background: rgba(255, 255, 255, 0.08); color: rgba(255, 255, 255, 0.25);
+            padding: 6px 12px; border-radius: 8px; font-size: 9px; z-index: 60; cursor: pointer; backdrop-filter: blur(2px);
+        }
+        #login-modal, #confirm-modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 10000; display: none; align-items: center; justify-content: center; }
+        .login-box, .confirm-box { background: #1d331d; border: 1px solid var(--accent); padding: 30px; border-radius: 20px; width: 280px; text-align: center; }
+
+        /* 後台樣式優化 */
+        #admin-panel { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f8f9fa; color: #333; z-index: 9999; overflow-y: auto; padding: 20px; display: none; }
+        .admin-section { background: white; padding: 15px; border-radius: 12px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+        .collapsible-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
+        .collapsible-header::after { content: '▼'; font-size: 8px; color: #999; transition: transform 0.3s; }
+        .collapsible-header.open::after { transform: rotate(180deg); }
+        .collapsible-content { display: none; padding-top: 12px; }
+        .collapsible-content.open { display: block; }
+        .stat-list-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #f9f9f9; font-size: 11px; }
+        .admin-table { width: 100%; border-collapse: collapse; font-size: 10px; margin-top: 10px; }
+        .admin-table th { background: #f1f1f1; padding: 8px; text-align: left; }
+        .admin-table td { padding: 8px; border-bottom: 1px solid #eee; }
+        .tab-btn { padding: 6px 16px; font-size: 11px; border-radius: 20px; border: 1px solid #ddd; background: white; color: #666; }
+        .tab-btn.active { background: #1a2e1a; color: white; border-color: #1a2e1a; }
+        
+        .adventure-invite-btn {
+            background: rgba(255,255,255,0.02); border: 1px dashed rgba(212, 175, 55, 0.3); color: var(--accent);
+            padding: 18px; border-radius: 20px; font-size: 0.85rem; letter-spacing: 0.15em; text-align: center; display: block; text-decoration: none; margin-top: 10px;
+        }
+        .back-btn-ui { background: transparent; border: 1px solid rgba(255,255,255,0.2); color: rgba(255,255,255,0.4); padding: 8px 16px; border-radius: 30px; font-size: 0.7rem; margin-top: 15px; cursor: pointer; align-self: center; }
+        .reset-btn { background: transparent; border: 1px solid rgba(255,255,255,0.1); color: rgba(255,255,255,0.3); padding: 12px; border-radius: 15px; font-size: 0.75rem; width: 100%; margin-top: 20px; letter-spacing: 0.1em; cursor: pointer; }
+        .hidden { display: none; }
+        .success-modal { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(26, 46, 26, 0.95); border: 1px solid var(--accent); padding: 30px; border-radius: 24px; text-align: center; z-index: 100; width: 80%; }
+    </style>
 </head>
 <body>
 
-```
-<div class="adventure-container">
-    <!-- 封面區 -->
-    <div id="start-screen" class="flex flex-col justify-between min-h-screen">
-        <div class="cover-overlay">
-            <p class="tracking-[0.6em] text-[10px] text-yellow-600 mb-6 uppercase">Inner Landscape Exploration</p>
-            <h1 class="adventure-title serif mb-6">植物人格<br>深層冒險</h1>
-            <p class="text-gray-400 text-sm leading-relaxed px-6">
-                在這座內在森林裡，發現妳的靈魂原型。<br>
-                完成鑑定，即可獲得「現場兌換憑證」，<br>
-                領取專屬精美小禮。
-            </p>
+    <div class="adventure-container">
+        <!-- 右上角入口 -->
+        <div class="admin-trigger-button" onclick="showLoginModal()">Powered by 未熟莓創研室</div>
+
+        <!-- 封面區 -->
+        <div id="start-screen" class="flex flex-col justify-between min-h-screen">
+            <div class="cover-overlay">
+                <p class="tracking-[0.6em] text-[10px] text-yellow-600 mb-6 uppercase">Inner Landscape Exploration</p>
+                <h1 class="adventure-title serif mb-6">植物人格<br>深層冒險</h1>
+                <p class="text-gray-400 text-sm leading-relaxed px-6">
+                    在這座內在森林裡，發現妳的靈魂原型。<br>
+                    完成鑑定，即可獲得「現場兌換憑證」，<br>
+                    領取專屬精美小禮。
+                </p>
+            </div>
+            <div class="p-10 mb-20 text-center">
+                <button onclick="startQuiz()" class="start-btn w-full">展開鑑定</button>
+            </div>
         </div>
-        <div class="p-10 mb-20 text-center">
-            <button onclick="startQuiz()" class="start-btn w-full">展開鑑定</button>
+
+        <!-- 測驗區 -->
+        <div id="quiz-screen" class="hidden p-8 py-14 flex flex-col">
+            <div class="flex justify-between items-center mb-3">
+                <span id="stage-name" class="text-yellow-600 text-[10px] font-bold uppercase tracking-widest">森林入口</span>
+                <span class="text-white text-xs" id="q-number">01 / 36</span>
+            </div>
+            <div class="progress-track"><div id="progress-fill" class="progress-bar" style="width: 0%"></div></div>
+            <h2 id="question-text" class="text-2xl font-bold mb-12 text-white serif min-h-[80px]"></h2>
+            <div id="options-box" class="flex-grow"></div>
+            <button id="back-btn" onclick="goBack()" class="back-btn-ui hidden">回上一題</button>
+        </div>
+
+        <!-- 姓名輸入 -->
+        <div id="name-screen" class="hidden p-10 text-center py-24">
+            <h2 class="text-2xl font-bold mb-4 text-white serif">探尋終點</h2>
+            <p class="text-gray-400 text-xs mb-10">請輸入稱呼，以生成個人鑑定書</p>
+            <input type="text" id="user-name" placeholder="您的名字" class="w-full bg-transparent border-b-2 border-yellow-700 text-center text-2xl text-yellow-500 outline-none mb-16 py-3">
+            <button onclick="calculateAndShowResult()" class="start-btn w-full text-lg">產生鑑定報告</button>
+        </div>
+
+        <!-- 結果報告 -->
+        <div id="result-screen" class="hidden p-6">
+            <div id="capture-area" class="p-10 text-center mb-8">
+                <div id="res-icon" class="text-7xl mb-6 pt-4 drop-shadow-lg"></div>
+                <p class="text-[10px] tracking-[0.5em] text-yellow-700 font-bold uppercase mb-2">Soul Archetype Report</p>
+                <h2 id="res-type" class="text-3xl font-black mb-4 serif text-stone-800"></h2>
+                <div class="flex justify-center mb-6"><span id="res-oil" class="oil-tag"></span></div>
+                <div class="quote-box text-left mb-6"><p id="res-coach" class="text-stone-700 text-[14px] italic font-bold leading-relaxed"></p></div>
+                <div class="text-left text-[13px] text-stone-600 leading-relaxed mb-8 bg-stone-100 p-4 rounded-xl"><p id="res-desc"></p></div>
+                <div class="mt-8 pt-6 border-t border-stone-200">
+                    <p class="text-[10px] text-stone-400 tracking-widest uppercase">Certified by 植感生活</p>
+                    <div id="res-date" class="text-[9px] text-stone-300 mt-2 mb-4"></div>
+                    <div class="text-[11px] font-bold text-stone-400 tracking-[0.2em]">Designed by @sberry chang</div>
+                </div>
+            </div>
+            <div class="space-y-4 px-2 mb-6">
+                <button onclick="downloadWithVoucher()" class="w-full bg-yellow-600 text-white py-5 rounded-2xl font-bold text-sm tracking-widest shadow-lg shadow-yellow-900/20 hover:bg-yellow-500 transition-all">下載鑑定書與憑證</button>
+                <a href="https://forms.gle/f6qitrCXgerTRhwXA" target="_blank" class="adventure-invite-btn" onclick="apiTrackFormClick()">領取勇者獎勵：前往森林集會 ➔</a>
+                <button onclick="resetQuiz()" class="reset-btn">重返森林入口 (重新測驗)</button>
+                <div class="grid grid-cols-2 gap-3 pt-6">
+                    <a href="https://www.facebook.com/NaturalAromaLife2026" target="_blank" class="bg-white/5 text-white/30 text-[9px] py-3 rounded-xl text-center border border-white/5 uppercase">FB 植感生活</a>
+                    <a href="https://www.youtube.com/@sberry.c" target="_blank" class="bg-white/5 text-white/30 text-[9px] py-3 rounded-xl text-center border border-white/5 uppercase">YT 莓好生活</a>
+                </div>
+            </div>
+            <div class="text-center opacity-20 pb-12"><p class="text-[9px] tracking-[0.4em] uppercase">Powered by 未熟莓創研室</p></div>
         </div>
     </div>
 
-    <!-- 測驗區 -->
-    <div id="quiz-screen" class="hidden p-8 py-14 flex flex-col">
-        <div class="flex justify-between items-center mb-3">
-            <span id="stage-name" class="text-yellow-600 text-[10px] font-bold tracking-[0.2em] uppercase">森林入口</span>
-            <span class="text-white text-xs" id="q-number">01 / 36</span>
-        </div>
-        <div class="progress-track">
-            <div id="progress-fill" class="progress-bar" style="width: 0%"></div>
-        </div>
-        <h2 id="question-text" class="text-2xl font-bold mb-12 leading-tight text-white serif min-h-[80px]"></h2>
-        <div id="options-box" class="flex-grow"></div>
-        <button id="back-btn" onclick="goBack()" class="back-btn-ui hidden">回上一題</button>
-    </div>
-
-    <!-- 姓名輸入 -->
-    <div id="name-screen" class="hidden p-10 text-center py-24">
-        <h2 class="text-2xl font-bold mb-4 text-white serif">探尋終點</h2>
-        <p class="text-gray-400 text-xs mb-10">請輸入稱呼，以生成個人鑑定書</p>
-        <input type="text" id="user-name" placeholder="您的名字" class="w-full bg-transparent border-b-2 border-yellow-700 text-center text-2xl text-yellow-500 outline-none mb-16 py-3">
-        <button onclick="calculateAndShowResult()" class="start-btn w-full text-lg">產生鑑定報告</button>
-    </div>
-
-    <!-- 結果報告 -->
-    <div id="result-screen" class="hidden p-6">
-        <!-- 鑑定卡片區域 -->
-        <div id="capture-area" class="p-10 text-center mb-8">
-            <div id="res-icon" class="text-7xl mb-6 pt-4 drop-shadow-lg"></div>
-            <p class="text-[10px] tracking-[0.5em] text-yellow-700 font-bold uppercase mb-2">Soul Archetype Report</p>
-            <h2 id="res-type" class="text-3xl font-black mb-4 serif text-stone-800"></h2>
-
-            <div class="flex justify-center mb-6">
-                <span id="res-oil" class="oil-tag"></span>
-            </div>
-
-            <div class="quote-box text-left mb-6">
-                <p id="res-coach" class="text-stone-700 text-[14px] italic font-bold leading-relaxed"></p>
-            </div>
-
-            <div class="text-left text-[13px] text-stone-600 leading-relaxed mb-8 bg-stone-100 p-4 rounded-xl">
-                <p id="res-desc"></p>
-            </div>
-
-            <div class="mt-8 pt-6 border-t border-stone-200">
-                <p class="text-[10px] text-stone-400 tracking-widest uppercase">Certified by 植感生活</p>
-                <div id="res-date" class="text-[9px] text-stone-300 mt-2 mb-4"></div>
-                <div class="text-[11px] font-bold text-stone-400 tracking-[0.2em]">Designed by @sberry chang</div>
-            </div>
+    <!-- 後台介面 -->
+    <div id="admin-panel">
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="font-bold text-lg">數據監控中心</h2>
+            <button onclick="renderAdminData()" class="text-blue-600 text-[10px] border border-blue-200 px-3 py-1 rounded-full bg-blue-50">手動刷新</button>
+            <button onclick="closeAdmin()" class="text-gray-400 text-xs bg-white border px-3 py-1 rounded-full">離開</button>
         </div>
 
-        <!-- 下載與接續行動 -->
-        <div class="space-y-4 px-2 mb-6">
-            <button onclick="downloadWithVoucher()" class="w-full bg-yellow-600 text-white py-5 rounded-2xl font-bold text-sm tracking-widest shadow-lg shadow-yellow-900/20 hover:bg-yellow-500 transition-all">
-                下載鑑定書與憑證
-            </button>
-
-            <a href="<https://forms.gle/f6qitrCXgerTRhwXA>" target="_blank" class="adventure-invite-btn">
-                領取勇者獎勵：前往森林集會 ➔
-            </a>
-
-            <!-- 重新測驗按鈕 -->
-            <button onclick="resetQuiz()" class="reset-btn">
-                重返森林入口 (重新測驗)
-            </button>
-
-            <div class="grid grid-cols-2 gap-3 pt-6">
-                <a href="<https://www.facebook.com/NaturalAromaLife2026>" target="_blank" class="bg-white/5 text-white/30 text-[9px] py-3 rounded-xl text-center border border-white/5 hover:bg-white/10 transition-colors tracking-widest uppercase">FB 植感生活</a>
-                <a href="<https://www.youtube.com/@sberry.c>" target="_blank" class="bg-white/5 text-white/30 text-[9px] py-3 rounded-xl text-center border border-white/5 hover:bg-white/10 transition-colors tracking-widest uppercase">YT 莓好生活</a>
-            </div>
+        <!-- 實時監測人次 -->
+        <div class="grid grid-cols-2 gap-3 mb-3">
+            <div class="admin-section text-center p-4 shadow-sm"><p class="text-[9px] text-gray-400 uppercase">點開連結人次</p><h4 id="stat-visits" class="text-xl font-black">0</h4></div>
+            <div class="admin-section text-center p-4 shadow-sm"><p class="text-[9px] text-gray-400 uppercase">完成測驗人次</p><h4 id="stat-completes" class="text-xl font-black text-green-600">0</h4></div>
+        </div>
+        <div class="grid grid-cols-2 gap-3 mb-6">
+            <div class="admin-section text-center p-4 shadow-sm"><p class="text-[9px] text-gray-400 uppercase">未測完人次</p><h4 id="stat-drops" class="text-xl font-black text-red-500">0</h4></div>
+            <div class="admin-section text-center p-4 shadow-sm border-2 border-emerald-100"><p class="text-[9px] text-emerald-600 uppercase font-bold">報名表點擊人次</p><h4 id="stat-form-clicks" class="text-xl font-black text-emerald-700">0</h4></div>
         </div>
 
-        <div class="text-center opacity-20 pb-12">
-            <p class="text-[9px] tracking-[0.4em] uppercase">Powered by 未熟莓創研室</p>
+        <div class="flex gap-2 mb-6">
+            <button id="tab-weekly" onclick="toggleTab('weekly')" class="tab-btn active shadow-sm">當週數據匯整</button>
+            <button id="tab-total" onclick="toggleTab('total')" class="tab-btn shadow-sm">總累積數據匯整</button>
+        </div>
+
+        <div class="admin-section">
+            <div class="collapsible-header" onclick="toggleCollapsible('personality-content')"><h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">九大植物人格分佈看板</h3></div>
+            <div id="personality-content" class="collapsible-content"><div id="personality-list" class="space-y-1"></div></div>
+        </div>
+
+        <div class="admin-section">
+            <div class="collapsible-header" onclick="toggleCollapsible('platform-content')"><h3 class="text-xs font-bold text-slate-500 uppercase tracking-widest">來源平台流量統計看板</h3></div>
+            <div id="platform-content" class="collapsible-content"><div id="platform-list" class="space-y-1"></div></div>
+        </div>
+
+        <div class="admin-section">
+            <div class="flex justify-between items-center mb-4 border-b pb-3">
+                <h3 class="text-xs font-bold text-slate-800">受測者詳細名單</h3>
+                <div class="flex gap-2">
+                    <button onclick="exportCSV()" class="text-[9px] bg-emerald-50 text-emerald-700 px-3 py-1 rounded-full font-bold">匯出</button>
+                    <button onclick="showConfirmModal()" class="text-[9px] bg-red-50 text-red-700 px-3 py-1 rounded-full font-bold">清空名單內容</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto"><table class="admin-table"><thead><tr><th>測驗時間</th><th>姓名</th><th>結果</th><th>精油</th><th>來源</th></tr></thead><tbody id="admin-data-body"></tbody></table></div>
         </div>
     </div>
-</div>
 
-<!-- 下載成功彈窗 -->
-<div id="success-modal" class="hidden success-modal">
-    <div class="text-4xl mb-4">🌿</div>
-    <h3 class="text-white font-bold text-xl mb-2 serif">憑證保存成功</h3>
-    <p class="text-gray-400 text-sm mb-6 leading-relaxed">
-        冒險尚未結束...<br>
-        請於現場出示鑑定書領取小禮，<br>
-        並點擊「森林集會」完成最後的覺醒。
-    </p>
-    <button onclick="closeModal()" class="text-yellow-600 font-bold tracking-widest text-xs uppercase border border-yellow-600 px-8 py-2 rounded-full">確定</button>
-</div>
+    <!-- 登入與確認彈窗 (自定義避免被攔截) -->
+    <div id="login-modal" onclick="hideLoginModal()">
+        <div class="login-box" onclick="event.stopPropagation()"><h3 class="text-white mb-4 serif font-bold text-lg">管理員登入</h3><input type="password" id="admin-pwd" placeholder="請輸入密碼" class="w-full bg-transparent border-b border-yellow-600 text-center text-yellow-500 outline-none mb-6 py-2"><button onclick="verifyAdmin()" class="w-full bg-yellow-600 text-white py-3 rounded-full text-xs font-bold">進入看板</button></div>
+    </div>
+    <div id="confirm-modal" onclick="hideConfirmModal()">
+        <div class="confirm-box" onclick="event.stopPropagation()"><h3 class="text-white mb-4 font-bold text-lg text-red-500">確定清空？</h3><p class="text-gray-400 text-xs mb-6">這將清空下方的受測名單內容。<br>上方的彙整統計與總數據會完整保留。</p><div class="flex gap-2"><button onclick="hideConfirmModal()" class="flex-1 text-gray-400 text-xs">取消</button><button onclick="confirmClearAction()" class="flex-1 bg-red-600 text-white py-3 rounded-full text-xs font-bold shadow-lg">確認清空</button></div></div>
+    </div>
 
-<script>
-    // 題庫與結果描述 (保持不變)
-    const quizData = [
-        { q: "來到森林入口，妳的直覺傾向於哪種行進方式？", stage: "森林入口", opts: [{ t: "充滿光影變化的路徑，視覺體驗豐富", w: "flower" }, { t: "觀察樹木的排列與層次", w: "leaf" }, { t: "尋找樹蔭最濃密、能遮蔽的地方", w: "wood" }, { t: "走上柔軟且覆蓋著濕潤物的小徑", w: "resin" }] },
-        { q: "風吹過枝枒，妳最先感受到的訊息是？", stage: "森林入口", opts: [{ t: "空氣中流動的甜味", w: "fruit" }, { t: "遠方隱隱的生命萌發氣息", w: "seed" }, { t: "大地深處傳來的震動與堅實感", w: "root" }, { t: "清透、能穿透表層的涼爽氣流", w: "herb" }] },
-        { q: "發現一顆未知果實，妳會怎麼做？", stage: "森林入口", opts: [{ t: "讚嘆它成熟後的飽滿狀態", w: "fruit" }, { t: "觀察它如何保護內部的核心", w: "seed" }, { t: "嗅聞它那股嗆辣的穿透感", w: "spice" }, { t: "聯想它是否能舒緩身體的不適", w: "herb" }] },
-        { q: "森林守護者要求妳交換一個內心渴望，妳說？", stage: "森林入口", opts: [{ t: "我渴望被眾人看見與認同", w: "flower" }, { t: "我追求森林般的有序與規律", w: "leaf" }, { t: "心中有股等待時機的巨大能量", w: "seed" }, { t: "我希望能撫平過去受過的創傷", w: "herb" }] },
-        { q: "面對森林中的分岔點，妳會選擇哪種路？", stage: "森林入口", opts: [{ t: "佈滿清理痕跡、路面平坦的方向", w: "leaf" }, { t: "隱約飄散著強烈刺激氣味的路", w: "spice" }, { t: "看起來最原始、最穩定的路線", w: "root" }, { t: "能看到遠方巨大枝幹支撐的路線", w: "wood" }] },
-        { q: "當妳感覺到能量被耗盡，妳會躲進哪？", stage: "森林入口", opts: [{ t: "枝葉層疊、空氣流動通暢的樹下", w: "leaf" }, { t: "瀰漫著濃稠氣味、陰涼的避風處", w: "resin" }, { t: "充滿花草香、繽紛多樣的區塊", w: "flower" }, { t: "充滿結實感、帶有甜味的灌木群", w: "fruit" }] },
-        { q: "妳在路邊拾起一項物品，妳選擇？", stage: "森林入口", opts: [{ t: "一顆觸感扎實、帶有沈重感的殼", w: "seed" }, { t: "一束散發特殊香氣的植物", w: "spice" }, { t: "一截充滿裂痕但質地堅硬的殘木", w: "wood" }, { t: "一片脈絡清晰、輕盈的葉", w: "leaf" }] },
-        { q: "森林中傳來規律的節奏聲，妳的身體反應是？", stage: "森林入口", opts: [{ t: "不自覺地擺動肢體，回應節拍", w: "flower" }, { t: "深呼吸，讓頻率與節奏同步轉化", w: "resin" }, { t: "腳步踏得更重，強化與地的連結", w: "root" }, { t: "進入深度靜止，感受頻率的振動", w: "wood" }] },
-        { q: "旅程初期，妳內心的狀態是？", stage: "森林入口", opts: [{ t: "急於體驗與創造豐盛感", w: "fruit" }, { t: "專注於讓重心變得平穩踏實", w: "root" }, { t: "保持冷靜，冷眼觀察環境的邏輯", w: "leaf" }, { t: "渴望釋放深藏已久的內在潛能", w: "seed" }] },
-        { q: "看到一棵老樹倒下，妳首先看到的是？", stage: "森林深處", opts: [{ t: "它倒下後釋放出的資源與回饋", w: "fruit" }, { t: "它原本支撐整片森林的結構", w: "wood" }, { t: "它深入土壤底層的根部結構", w: "root" }, { t: "它表皮分泌出來保護自己的物質", w: "resin" }] },
-        { q: "若妳迷路了，妳會怎麼尋找出口？", stage: "森林深處", opts: [{ t: "跟隨通風、空氣流通的方向", w: "leaf" }, { t: "循著那股帶有強烈穿透力的氣味", w: "spice" }, { t: "尋找最安靜、最讓人心安的區域", w: "herb" }, { t: "觀察光影最聚集、最閃亮的地方", w: "flower" }] },
-        { q: "森林裡的昆蟲吸引妳的目光，是因為？", stage: "森林深處", opts: [{ t: "它們正忙於處理花朵的授粉", w: "flower" }, { t: "它們正穿梭在各種植物間進行轉化", w: "resin" }, { t: "它們在保護著潛藏的生命精華", w: "seed" }, { t: "它們正吸取樹幹上的分泌物", w: "resin" }] },
-        { q: "當妳感到疲憊，最渴望的味道是？", stage: "森林深處", opts: [{ t: "穩定的木質基調", w: "wood" }, { t: "濃郁且帶有回甘的甜美", w: "fruit" }, { t: "輕盈且帶有涼意的清爽", w: "herb" }, { t: "帶有溫暖且刺激感官的氣息", w: "spice" }] },
-        { q: "面對分岔路，妳憑什麼直覺做決定？", stage: "森林深處", opts: [{ t: "哪邊看起來最能舒緩身心", w: "herb" }, { t: "哪邊看起來最絢麗奪目", w: "flower" }, { t: "哪邊的樹木看起來最堅毅", w: "wood" }, { t: "哪邊讓妳感到地氣最沉穩", w: "root" }] },
-        { q: "大雨降臨，妳的防禦機制是？", stage: "森林深處", opts: [{ t: "壓縮自己，將能量退縮至最核心", w: "seed" }, { t: "產生防護屏障，將自己封存", w: "resin" }, { t: "尋求環境中的平衡，調整內在代謝", w: "herb" }, { t: "讓自己變得輕盈，隨雨水流動", w: "leaf" }] },
-        { q: "發現封閉寶箱，妳覺得裡面裝著什麼？", stage: "森林深處", opts: [{ t: "稀有且充滿遺傳記憶的精華", w: "seed" }, { t: "經過漫長時間形成的琥珀色精華", w: "resin" }, { t: "複雜且具轉化力的古老配方", w: "spice" }, { t: "濃縮了生命精華的甜美殘留", w: "fruit" }] },
-        { q: "與旅伴溝通時，妳習慣的風格是？", stage: "森林深處", opts: [{ t: "展現個人的魅力與亮點", w: "flower" }, { t: "傳遞客觀且具脈絡的資訊", w: "leaf" }, { t: "用言語刺激對方，突破盲點", w: "spice" }, { t: "真誠地給予支持與承諾", w: "root" }] },
-        { q: "此階段中，妳最在意什麼？", stage: "森林深處", opts: [{ t: "有沒有達成目標，看到具體結果", w: "fruit" }, { t: "腳下踩的是否紮實", w: "root" }, { t: "資訊流動是否順暢", w: "leaf" }, { t: "內在是否得到療癒的平靜", w: "herb" }] },
-        { q: "身體感到輕微不適時，妳的手段是？", stage: "森林試煉", opts: [{ t: "找尋淨化力強的植物協助", w: "herb" }, { t: "尋找能活化氣血的方法", w: "spice" }, { t: "靜止不動，修復受損結構", w: "resin" }, { t: "回歸源頭，讓生命重新啟動", w: "seed" }] },
-        { q: "森林旅程中，妳最恐懼的遭遇是？", stage: "森林試煉", opts: [{ t: "失去目標，沒有豐收感", w: "fruit" }, { t: "失去屏障，內在被侵蝕", w: "resin" }, { t: "失去重心，被拋入未知", w: "root" }, { t: "失去光采，內在黯淡", w: "flower" }] },
-        { q: "遇到斷崖，妳的跨越方式是？", stage: "森林試煉", opts: [{ t: "運用強大的衝勁與動力一躍而過", w: "spice" }, { t: "確保重心穩固，一步步謹慎爬升", w: "root" }, { t: "觀察風勢與氣流，順勢而為", w: "leaf" }, { t: "相信內在那股不可預測的力量", w: "seed" }] },
-        { q: "發現一株凋零的花，妳的反射動作是？", stage: "森林試煉", opts: [{ t: "產生強烈的共鳴感", w: "flower" }, { t: "思考它為何無法走到圓滿的結果", w: "fruit" }, { t: "尋找方法將它修復回原貌", w: "herb" }, { t: "觀察它的支撐結構是否還在", w: "wood" }] },
-        { q: "黑夜來臨，妳最想靠著什麼？", stage: "森林試煉", opts: [{ t: "具備防護力的隔絕層", w: "resin" }, { t: "堅硬可靠的支撐體", w: "wood" }, { t: "充滿生命喜悅的溫暖感", w: "flower" }, { t: "能導引方向的訊息來源", w: "leaf" }] },
-        { q: "夜裡螢火蟲閃爍，妳想到的是？", stage: "森林試煉", opts: [{ t: "綻放生命輝煌的瞬間", w: "flower" }, { t: "深層生命能量的閃現", w: "seed" }, { t: "穿梭在物質間的活力", w: "spice" }, { t: "淨化環境壓力的契機", w: "herb" }] },
-        { q: "妳對「改變」的直覺是？", stage: "森林試煉", opts: [{ t: "需要強大的衝擊才能變革", w: "spice" }, { t: "為了結構穩定，應拒絕隨意改變", w: "wood" }, { t: "應隨環境流動，靈活適應", w: "leaf" }, { t: "改變是為了未來更好的收成", w: "fruit" }] },
-        { q: "如果可以修改規則，妳想變更什麼？", stage: "森林試煉", opts: [{ t: "讓萬物都能綻放自我", w: "flower" }, { t: "讓潛能都能落地生根", w: "root" }, { t: "讓療癒不再需要等待時間", w: "herb" }, { t: "讓防禦隨處可得", w: "resin" }] },
-        { q: "旅程最後，妳發現自己最需要的是？", stage: "森林試煉", opts: [{ t: "被傾聽、被理解的感覺", w: "herb" }, { t: "被支撐、被承擔的穩定", w: "wood" }, { t: "被清空、被還原的平靜", w: "leaf" }, { t: "被讚賞、被肯定的魅力", w: "flower" }] },
-        { q: "離開森林，妳最後的印象是？", stage: "森林歸途", opts: [{ t: "豐盛的收穫感", w: "fruit" }, { t: "龐大的森林系統", w: "wood" }, { t: "隱藏在地下的無限可能", w: "seed" }, { t: "隨風飄散的淨化氣息", w: "herb" }] },
-        { q: "這次探險的終極收穫是？", stage: "森林歸途", opts: [{ t: "學會如何華麗地展現", w: "flower" }, { t: "學會如何修補內在屏障", w: "resin" }, { t: "學會如何腳踏實地", w: "root" }, { t: "學會如何運用變革的能量", w: "spice" }] },
-        { q: "最想帶回現實的是？", stage: "森林歸途", opts: [{ t: "對豐盛的渴望", w: "fruit" }, { t: "對未來的願景與種子", w: "seed" }, { t: "對身心淨化的能力", w: "herb" }, { t: "對事物的支撐力", w: "wood" }] },
-        { q: "發現他人迷路，妳會？", stage: "森林歸途", opts: [{ t: "給予導引資訊", w: "leaf" }, { t: "給予修復支援", w: "resin" }, { t: "給予動力激勵", w: "spice" }, { t: "給予陪伴感", w: "root" }] },
-        { q: "妳在森林留下了什麼？", stage: "森林歸途", opts: [{ t: "成長的足跡", w: "fruit" }, { t: "褪去的舊有殼層", w: "seed" }, { t: "穩固的根基", w: "root" }, { t: "一抹淡淡的防護力", w: "resin" }] },
-        { q: "對於未來，妳的期待是？", stage: "森林歸途", opts: [{ t: "更深層的內在癒合", w: "herb" }, { t: "更明確的達成目標", w: "fruit" }, { t: "更開闊的資訊交流", w: "leaf" }, { t: "更穩固的心理支撐", w: "wood" }] },
-        { q: "回到現實，妳的第一件事是？", stage: "森林歸途", opts: [{ t: "分享此行的見聞", w: "flower" }, { t: "整理生活重心", w: "root" }, { t: "進行一次深度淨化", w: "herb" }, { t: "規劃下一步藍圖", w: "leaf" }] },
-        { q: "妳認為此行最強的武器是？", stage: "森林歸途", opts: [{ t: "變革與衝擊力", w: "spice" }, { t: "綻放與表現力", w: "flower" }, { t: "屏障與修復力", w: "resin" }, { t: "穩定與連結力", w: "root" }] },
-        { q: "最後，妳如何定義自己？", stage: "森林歸途", opts: [{ t: "正在醞釀能量的潛力者", w: "seed" }, { t: "具備療癒轉化能力的修復者", w: "herb" }, { t: "追求訊息交流的流動者", w: "leaf" }, { t: "支撐整體結構的堅定者", w: "wood" }] }
-    ];
+    <!-- 下載成功提示 -->
+    <div id="success-modal" class="hidden success-modal shadow-2xl">
+        <div class="text-4xl mb-4">🌿</div>
+        <h3 class="text-white font-bold text-xl mb-2 serif">憑證保存成功</h3>
+        <p class="text-gray-400 text-sm mb-6 leading-relaxed">請於現場出示鑑定書領取小禮，並點擊「森林集會」完成最後的覺醒。</p>
+        <button onclick="closeModal()" class="text-yellow-600 font-bold text-xs border border-yellow-600 px-8 py-2 rounded-full mt-4">確定</button>
+    </div>
 
-    const resultsDesc = {
-        flower: { name: "花朵型：綻放的演出者", icon: "🌸", oil: "對應：玫瑰 / 依蘭依蘭", coach: "「妳的美麗源自於勇於被看見。」", desc: "妳擅長展現最美好的一面，擁有極佳的感染力。但在鎂光燈外，妳常恐懼被遺忘。學會為自己而開，那才是永不凋零的力量。" },
-        leaf: { name: "葉片型：流動的智者", icon: "🌿", oil: "對應：尤加利 / 迷迭香", coach: "「呼吸之間，妳正與世界交換訊息。」", desc: "妳吸收資訊的速度極快，擅長適應。但要注意過度流動可能導致核心不穩。適時的淨化與沈澱，能讓妳的脈絡更加清晰。" },
-        wood: { name: "木質型：堅毅的守望者", icon: "🌲", oil: "對應：雪松 / 檀香", coach: "「妳的沈穩，是森林最安靜的依靠。」", desc: "妳追求秩序與支撐。妳是他人眼中的大樹，卻也容易因為固執而折斷。學會適度的柔軟，真正的強大是隨風而不倒。" },
-        resin: { name: "樹脂型：療癒的修復師", icon: "💧", oil: "對應：乳香 / 沒藥", coach: "「傷口，是光進入妳靈魂的地方。」", desc: "妳擁有極強的防護力與轉化力。妳能將傷痛封存在歲月裡，化為珍過且具神秘感的琥珀。妳的沈靜，本身就是一種神聖的療癒力。" },
-        fruit: { name: "果實型：豐盛的給予者", icon: "🍒", oil: "對應：甜橙 / 佛手柑", coach: "「收穫的喜悅，是生命最甜美的回饋。」", desc: "妳追求具體的成果與回饋。妳渴望富足，也樂於分享。當妳學會不再計算得失時，真正的豐盛才會如期而至。" },
-        seed: { name: "種籽型：潛能的孕育者", icon: "🌰", oil: "對應：黑胡椒 / 豆蔻", coach: "「微小的核心裡，藏著整座森林。」", desc: "妳內含巨大的爆發力，目前正處於醞釀期。妳不輕易示人，卻對生命本質有極深追求。等待那場及時雨，妳將震撼整片土壤。" },
-        root: { name: "根部型：踏實的連結者", icon: "🍠", oil: "對應：岩蘭草 / 薑", coach: "「越是深入黑暗，越能撐起繁茂。」", desc: "妳追求極致的安全感與連結。妳深知地氣的重要，重視傳統。只要腳下的土地紮實，沒有任何風暴能將妳連根拔起。" },
-        spice: { name: "香料型：熱情的催化劑", icon: "🔥", oil: "對應：肉桂 / 丁香", coach: "「妳的熱情，能瞬間點燃沈悶的空氣。」", desc: "妳討厭平庸，追求刺激與變革。妳是那個推動世界轉動的人。要注意火候，讓這股能量成為溫暖的力量而非毀滅的烈焰。" },
-        herb: { name: "藥草型：犧牲的引導者", icon: "🌱", oil: "對應：薰衣草 / 德國洋甘菊", coach: "「純淨的心，能撫平所有躁動。」", desc: "妳天生具備關懷與修復他人的能力。妳總是在付出，卻忘了給自己留一份溫柔。先療癒好自己，妳的香氣才會更加純粹。" }
-    };
+    <script>
+        const quizData = [
+            { q: "來到森林入口，妳的直覺傾向於哪種行進方式？", stage: "森林入口", opts: [{ t: "充滿光影變化的路徑，視覺體驗豐富", w: "flower" }, { t: "觀察樹木的排列與層次", w: "leaf" }, { t: "尋找樹蔭最濃密、能遮蔽的地方", w: "wood" }, { t: "走上柔軟且覆蓋著濕潤物的小徑", w: "resin" }] },
+            { q: "風吹過枝枒，妳最先感受到的訊息是？", stage: "森林入口", opts: [{ t: "空氣中流動的甜味", w: "fruit" }, { t: "遠方隱隱的生命萌發氣息", w: "seed" }, { t: "大地深處傳來的震動與堅實感", w: "root" }, { t: "清透、能穿透表層的涼爽氣流", w: "herb" }] },
+            { q: "發現一顆未知果實，妳會怎麼做？", stage: "森林入口", opts: [{ t: "讚嘆它成熟後的飽滿狀態", w: "fruit" }, { t: "觀察它如何保護內部的核心", w: "seed" }, { t: "嗅聞它那股嗆辣的穿透感", w: "spice" }, { t: "聯想它是否能舒緩身體的不適", w: "herb" }] },
+            { q: "森林守護者要求妳交換一個內心渴望，妳說？", stage: "森林入口", opts: [{ t: "我渴望被眾人看見與認同", w: "flower" }, { t: "我追求森林般的有序與規律", w: "leaf" }, { t: "心中有股等待時機的巨大能量", w: "seed" }, { t: "我希望能撫平過去受過的創傷", w: "herb" }] },
+            { q: "面對森林中的分岔點，妳會選擇哪種路？", stage: "森林入口", opts: [{ t: "佈滿清理痕跡、路面平坦的方向", w: "leaf" }, { t: "隱約飄散著強烈刺激氣味的路", w: "spice" }, { t: "看起來最原始、最穩定的路線", w: "root" }, { t: "能看到遠方巨大枝幹支撐的路線", w: "wood" }] },
+            { q: "當妳感覺到能量被耗盡，妳會躲進哪？", stage: "森林入口", opts: [{ t: "枝葉層疊、空氣流動通暢的樹下", w: "leaf" }, { t: "瀰漫著濃稠氣味、陰涼的避風處", w: "resin" }, { t: "充滿花草香、繽紛多樣的區塊", w: "flower" }, { t: "充滿結實感、帶有甜味的灌木群", w: "fruit" }] },
+            { q: "妳在路邊拾起一項物品，妳選擇？", stage: "森林入口", opts: [{ t: "一顆觸感扎實、帶有沈重感的殼", w: "seed" }, { t: "一束散發特殊香氣的植物", w: "spice" }, { t: "一截充滿裂痕但質地堅硬的殘木", w: "wood" }, { t: "一片脈絡清晰、輕盈的葉", w: "leaf" }] },
+            { q: "森林中傳來規律的節奏聲，妳的身體反應是？", stage: "森林入口", opts: [{ t: "不自覺地擺動肢體，回應節拍", w: "flower" }, { t: "深呼吸，讓頻率與節奏同步轉化", w: "resin" }, { t: "腳步踏得更重，強化與地的連結", w: "root" }, { t: "進入深度靜止，感受頻率的振動", w: "wood" }] },
+            { q: "旅程初期，妳內心的狀態是？", stage: "森林入口", opts: [{ t: "急於體驗與創造豐盛感", w: "fruit" }, { t: "專注於讓重心變得平穩踏實", w: "root" }, { t: "保持冷靜，冷眼觀察環境的邏輯", w: "leaf" }, { t: "渴望釋放深藏已久的內在潛能", w: "seed" }] },
+            { q: "看到一棵老樹倒下，妳首先看到的是？", stage: "森林深處", opts: [{ t: "它倒下後釋放出的資源與回饋", w: "fruit" }, { t: "它原本支撐整片森林的結構", w: "wood" }, { t: "它深入土壤底層的根部結構", w: "root" }, { t: "它表皮分泌出來保護自己的物質", w: "resin" }] },
+            { q: "若妳迷路了，妳會怎麼尋找出口？", stage: "森林深處", opts: [{ t: "跟隨通風、空氣流通的方向", w: "leaf" }, { t: "循著那股帶有強烈穿透力的氣味", w: "spice" }, { t: "尋找最安靜、最讓人心安的區域", w: "herb" }, { t: "觀察光影最聚集、最閃亮的地方", w: "flower" }] },
+            { q: "森林裡的昆蟲吸引妳的目光，是因為？", stage: "森林深處", opts: [{ t: "它們正忙於處理花朵的授粉", w: "flower" }, { t: "它們正穿梭在各種植物間進行轉化", w: "resin" }, { t: "它們在保護著潛藏的生命精華", w: "seed" }, { t: "它們正吸取樹幹上的分泌物", w: "resin" }] },
+            { q: "當妳感到疲憊，最渴望的味道是？", stage: "森林深處", opts: [{ t: "穩定的木質基調", w: "wood" }, { t: "濃郁且帶有回甘的甜美", w: "fruit" }, { t: "輕盈且帶有涼意的清爽", w: "herb" }, { t: "帶有溫暖且刺激感官的氣息", w: "spice" }] },
+            { q: "面對分岔路，妳憑什麼直覺做決定？", stage: "森林深處", opts: [{ t: "哪邊看起來最能舒緩身心", w: "herb" }, { t: "哪邊看起來最絢麗奪目", w: "flower" }, { t: "哪邊的樹木看起來最堅毅", w: "wood" }, { t: "哪邊讓妳感到地氣最沉穩", w: "root" }] },
+            { q: "大雨降臨，妳的防禦機制是？", stage: "森林深處", opts: [{ t: "壓縮自己，將能量退縮至最核心", w: "seed" }, { t: "產生防護屏障，將自己封存", w: "resin" }, { t: "尋求環境中的平衡，調整內在代謝", w: "herb" }, { t: "讓自己變得輕盈，隨雨水流動", w: "leaf" }] },
+            { q: "發現封閉寶箱，妳覺得裡面裝著什麼？", stage: "森林深處", opts: [{ t: "稀有且充滿遺傳記憶的精華", w: "seed" }, { t: "經過漫長時間形成的琥珀色精華", w: "resin" }, { t: "複雜且具轉化力的古老配方", w: "spice" }, { t: "濃縮了生命精華的甜美殘留", w: "fruit" }] },
+            { q: "與旅伴溝通時，妳習慣的風格是？", stage: "森林深處", opts: [{ t: "展現個人的魅力與亮點", w: "flower" }, { t: "傳遞客觀且具脈絡的資訊", w: "leaf" }, { t: "用言語刺激對方，突破盲點", w: "spice" }, { t: "真誠地給予支持與承諾", w: "root" }] },
+            { q: "此階段中，妳最在意什麼？", stage: "森林深處", opts: [{ t: "有沒有達成目標，看到具體結果", w: "fruit" }, { t: "腳下踩的是否紮實", w: "root" }, { t: "資訊流動是否順暢", w: "leaf" }, { t: "內在是否得到療癒的平靜", w: "herb" }] },
+            { q: "身體感到輕微不適時，妳的手段是？", stage: "森林試煉", opts: [{ t: "找尋淨化力強的植物協助", w: "herb" }, { t: "尋找能活化氣血的方法", w: "spice" }, { t: "靜止不動，修復受損結構", w: "resin" }, { t: "回歸源頭，讓生命重新啟動", w: "seed" }] },
+            { q: "森林旅程中，妳最恐懼的遭遇是？", stage: "森林試煉", opts: [{ t: "失去目標，沒有豐收感", w: "fruit" }, { t: "失去屏障，內在被侵蝕", w: "resin" }, { t: "失去重心，被拋入未知", w: "root" }, { t: "失去光采，內在黯淡", w: "flower" }] },
+            { q: "遇到斷崖，妳的跨越方式是？", stage: "森林試煉", opts: [{ t: "運用強大的衝勁與動力一躍而過", w: "spice" }, { t: "確保重心穩固，一步步謹慎爬升", w: "root" }, { t: "觀察風勢與氣流，順勢而為", w: "leaf" }, { t: "相信內在那股不可預測的力量", w: "seed" }] },
+            { q: "發現一株凋零的花，妳的反射動作是？", stage: "森林試煉", opts: [{ t: "產生強烈的共鳴感", w: "flower" }, { t: "思考它為何無法走到圓滿的結果", w: "fruit" }, { t: "尋找方法將它修復回原貌", w: "herb" }, { t: "觀察它的支撐結構是否還在", w: "wood" }] },
+            { q: "黑夜來臨，妳最想靠著什麼？", stage: "森林試煉", opts: [{ t: "具備防護力的隔絕層", w: "resin" }, { t: "堅硬可靠的支撐體", w: "wood" }, { t: "充滿生命喜悅的溫暖感", w: "flower" }, { t: "能導引方向的訊息來源", w: "leaf" }] },
+            { q: "夜裡螢火蟲閃爍，妳想到的是？", stage: "森林試煉", opts: [{ t: "綻放生命輝煌的瞬間", w: "flower" }, { t: "深層生命能量的閃現", w: "seed" }, { t: "穿梭在物質間的活力", w: "spice" }, { t: "淨化環境壓力的契機", w: "herb" }] },
+            { q: "妳對「改變」的直覺是？", stage: "森林試煉", opts: [{ t: "需要強大的衝擊才能變革", w: "spice" }, { t: "為了結構穩定，應拒絕隨意改變", w: "wood" }, { t: "應隨環境流動，靈活適應", w: "leaf" }, { t: "改變是為了未來更好的收成", w: "fruit" }] },
+            { q: "如果可以修改規則，妳想變更什麼？", stage: "森林試煉", opts: [{ t: "讓萬物都能綻放自我", w: "flower" }, { t: "讓潛能都能落地生根", w: "root" }, { t: "讓療癒不再需要等待時間", w: "herb" }, { t: "讓防禦隨處可得", w: "resin" }] },
+            { q: "旅程最後，妳發現自己最需要的是？", stage: "森林試煉", opts: [{ t: "被傾聽、被理解的感覺", w: "herb" }, { t: "被支撐、被承擔的穩定", w: "wood" }, { t: "被清空、被還原的平靜", w: "leaf" }, { t: "被讚賞、被肯定的魅力", w: "flower" }] },
+            { q: "離開森林，妳最後的印象是？", stage: "森林歸途", opts: [{ t: "豐盛的收穫感", w: "fruit" }, { t: "龐大的森林系統", w: "wood" }, { t: "隱藏在地下的無限可能", w: "seed" }, { t: "隨風飄散的淨化氣息", w: "herb" }] },
+            { q: "這次探險的終極收穫是？", stage: "森林歸途", opts: [{ t: "學會如何華麗地展現", w: "flower" }, { t: "學會如何修補內在屏障", w: "resin" }, { t: "學會如何腳踏實地", w: "root" }, { t: "學會如何運用變革的能量", w: "spice" }] },
+            { q: "最想帶回現實的是？", stage: "森林歸途", opts: [{ t: "對豐盛的渴望", w: "fruit" }, { t: "對未來的願景與種子", w: "seed" }, { t: "對身心淨化的能力", w: "herb" }, { t: "對事物的支撐力", w: "wood" }] },
+            { q: "發現他人迷路，妳會？", stage: "森林歸途", opts: [{ t: "給予導引資訊", w: "leaf" }, { t: "給予修復支援", w: "resin" }, { t: "給予動力激勵", w: "spice" }, { t: "給予陪伴感", w: "root" }] },
+            { q: "妳在森林留下了什麼？", stage: "森林歸途", opts: [{ t: "成長的足跡", w: "fruit" }, { t: "褪去的舊有殼層", w: "seed" }, { t: "穩固的根基", w: "root" }, { t: "一抹淡淡的防護力", w: "resin" }] },
+            { q: "對於未來，妳的期待是？", stage: "森林歸途", opts: [{ t: "更深層的內在癒合", w: "herb" }, { t: "更明確的達成目標", w: "fruit" }, { t: "更開闊的資訊交流", w: "leaf" }, { t: "更穩固的心理支撐", w: "wood" }] },
+            { q: "回到現實，妳的第一件事是？", stage: "森林歸途", opts: [{ t: "分享此行的見聞", w: "flower" }, { t: "整理生活重心", w: "root" }, { t: "進行一次深度淨化", w: "herb" }, { t: "規劃下一步藍圖", w: "leaf" }] },
+            { q: "妳認為此行最強的武器是？", stage: "森林歸途", opts: [{ t: "變革與衝擊力", w: "spice" }, { t: "綻放與表現力", w: "flower" }, { t: "屏障與修復力", w: "resin" }, { t: "穩定與連結力", w: "root" }] },
+            { q: "最後，妳如何定義自己？", stage: "森林歸途", opts: [{ t: "正在醞釀能量的潛力者", w: "seed" }, { t: "具備療癒轉化能力的修復者", w: "herb" }, { t: "追求訊息交流的流動者", w: "leaf" }, { t: "支撐整體結構的堅定者", w: "wood" }] }
+        ];
 
-    let currentQ = 0;
-    let scores = { flower:0, leaf:0, wood:0, resin:0, fruit:0, seed:0, root:0, spice:0, herb:0 };
-    let history = [];
+        const resultsDesc = {
+            flower: { name: "花朵型", oil: "玫瑰 / 依蘭依蘭", icon: "🌸", coach: "「妳的美麗源自於勇於被看見。」", desc: "妳擁有極佳的感染力。" },
+            leaf: { name: "葉片型", oil: "尤加利 / 迷迭香", icon: "🌿", coach: "「呼吸之間，與世界交換訊息。」", desc: "妳吸收資訊的速度極快。" },
+            wood: { name: "木質型", oil: "雪松 / 檀香", icon: "🌲", coach: "「妳的沈穩，是森林的依靠。」", desc: "妳追求秩序與支撐。" },
+            resin: { name: "樹脂型", oil: "乳香 / 沒藥", icon: "💧", coach: "「傷口是光進入靈魂的地方。」", desc: "妳擁有極強的防護力。" },
+            fruit: { name: "果實型", oil: "甜橙 / 佛手柑", icon: "🍒", coach: "「收穫的喜悅是回饋。」", desc: "妳追求具體的成果。" },
+            seed: { name: "種籽型", oil: "黑胡椒 / 豆蔻", icon: "🌰", coach: "「微小核心藏著整座森林。」", desc: "妳內含巨大的爆發力。" },
+            root: { name: "根部型", oil: "岩蘭草 / 薑", icon: "🍠", coach: "「深入黑暗越能撐起繁茂。」", desc: "妳追求極致的安全感。" },
+            spice: { name: "香料型", oil: "肉桂 / 丁香", icon: "🔥", coach: "「熱情能點燃沈悶空氣。」", desc: "妳追求刺激與變革。" },
+            herb: { name: "藥草型", oil: "薰衣草 / 德國洋甘菊", icon: "🌱", coach: "「純淨的心能撫平躁動。」", desc: "妳天生具備療癒能力。" }
+        };
 
-    function startQuiz() {
-        document.getElementById('start-screen').classList.add('hidden');
-        document.getElementById('quiz-screen').classList.remove('hidden');
-        showQuestion();
-    }
+        let currentQ = 0, scores = { flower:0, leaf:0, wood:0, resin:0, fruit:0, seed:0, root:0, spice:0, herb:0 }, history = [];
 
-    function showQuestion() {
-        const data = quizData[currentQ];
-        document.getElementById('stage-name').innerText = data.stage;
-        document.getElementById('q-number').innerText = `${String(currentQ+1).padStart(2,'0')} / 36`;
-        document.getElementById('question-text').innerText = data.q;
-        document.getElementById('progress-fill').style.width = ((currentQ+1) / 36 * 100) + '%';
+        function startQuiz() { document.getElementById('start-screen').classList.add('hidden'); document.getElementById('quiz-screen').classList.remove('hidden'); showQuestion(); }
 
-        if(currentQ > 0) document.getElementById('back-btn').classList.remove('hidden');
-        else document.getElementById('back-btn').classList.add('hidden');
-
-        const box = document.getElementById('options-box');
-        box.innerHTML = '';
-
-        let options = [...data.opts].sort(() => Math.random() - 0.5);
-        options.forEach(opt => {
-            const b = document.createElement('button');
-            b.className = 'option-btn';
-            b.innerText = opt.t;
-            b.onclick = () => {
-                scores[opt.w]++;
-                history.push(opt.w);
-                currentQ++;
-                if(currentQ < 36) showQuestion();
-                else showNameInput();
-            };
-            box.appendChild(b);
-        });
-    }
-
-    function goBack() {
-        if(currentQ > 0) {
-            const lastW = history.pop();
-            scores[lastW]--;
-            currentQ--;
-            showQuestion();
+        function showQuestion() {
+            const data = quizData[currentQ];
+            document.getElementById('q-number').innerText = `${String(currentQ+1).padStart(2,'0')} / 36`;
+            document.getElementById('question-text').innerText = data.q;
+            document.getElementById('progress-fill').style.width = ((currentQ+1) / 36 * 100) + '%';
+            document.getElementById('back-btn').classList.toggle('hidden', currentQ === 0);
+            const box = document.getElementById('options-box'); box.innerHTML = '';
+            let options = [...data.opts].sort(() => Math.random() - 0.5);
+            options.forEach(opt => {
+                const b = document.createElement('button'); b.className = 'option-btn'; b.innerText = opt.t;
+                b.onclick = () => { scores[opt.w]++; history.push(opt.w); currentQ++; if(currentQ < 36) showQuestion(); else showNameInput(); };
+                box.appendChild(b);
+            });
         }
-    }
+        function goBack() { if(currentQ > 0) { scores[history.pop()]--; currentQ--; showQuestion(); } }
+        function showNameInput() { document.getElementById('quiz-screen').classList.add('hidden'); document.getElementById('name-screen').classList.remove('hidden'); }
 
-    function showNameInput() {
-        document.getElementById('quiz-screen').classList.add('hidden');
-        document.getElementById('name-screen').classList.remove('hidden');
-    }
+        async function calculateAndShowResult() {
+            const name = document.getElementById('user-name').value || "森林旅者";
+            let winner = 'flower', max = -1;
+            for(let key in scores) if(scores[key] > max) { max = scores[key]; winner = key; }
+            const res = resultsDesc[winner];
+            document.getElementById('res-icon').innerText = res.icon;
+            document.getElementById('res-type').innerText = res.name;
+            document.getElementById('res-oil').innerText = "對應：" + res.oil;
+            document.getElementById('res-coach').innerText = res.coach;
+            document.getElementById('res-desc').innerText = res.desc;
+            document.getElementById('res-date').innerText = "鑑定日期: " + new Date().toLocaleDateString();
 
-    function calculateAndShowResult() {
-        const name = document.getElementById('user-name').value || "森林旅者";
-        let winner = 'flower';
-        let max = -1;
-        for(let key in scores) {
-            if(scores[key] > max) { max = scores[key]; winner = key; }
+            if(window.apiSaveData) await window.apiSaveData({ userName: name, resultType: res.name, essentialOil: res.oil });
+
+            document.getElementById('name-screen').classList.add('hidden');
+            document.getElementById('result-screen').classList.remove('hidden');
+            window.scrollTo(0,0);
         }
 
-        const res = resultsDesc[winner];
-        document.getElementById('res-icon').innerText = res.icon;
-        document.getElementById('res-type').innerText = res.name;
-        document.getElementById('res-oil').innerText = res.oil;
-        document.getElementById('res-coach').innerText = res.coach;
-        document.getElementById('res-desc').innerText = res.desc;
-        document.getElementById('res-date').innerText = "鑑定日期: " + new Date().toLocaleDateString();
+        function downloadWithVoucher() {
+            const btn = event.currentTarget; btn.innerText = "生成中...";
+            html2canvas(document.getElementById('capture-area'), { scale: 3 }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `鑑定-${document.getElementById('user-name').value}.png`;
+                link.href = canvas.toDataURL(); link.click();
+                btn.innerText = "下載鑑定書與憑證";
+                document.getElementById('success-modal').classList.remove('hidden');
+            });
+        }
+        function closeModal() { document.getElementById('success-modal').classList.add('hidden'); }
+        function resetQuiz() { location.reload(); }
 
-        document.getElementById('name-screen').classList.add('hidden');
-        document.getElementById('result-screen').classList.remove('hidden');
-        window.scrollTo(0,0);
-    }
+        // --- 管理員後台邏輯 ---
+        let adminData = { results: [], totalStats: {}, weeklyStats: {} }, currentView = 'weekly';
+        function toggleTab(type) { currentView = type; document.getElementById('tab-weekly').classList.toggle('active', type === 'weekly'); document.getElementById('tab-total').classList.toggle('active', type === 'total'); renderStats(); }
+        function toggleCollapsible(id) { const content = document.getElementById(id); content.classList.toggle('open'); content.previousElementSibling.classList.toggle('open'); }
+        
+        function showLoginModal() { document.getElementById('login-modal').style.display = 'flex'; }
+        function hideLoginModal() { document.getElementById('login-modal').style.display = 'none'; }
+        function verifyAdmin() { if (document.getElementById('admin-pwd').value === "811694") { hideLoginModal(); document.getElementById('admin-panel').style.display = 'block'; renderAdminData(); } }
+        function closeAdmin() { document.getElementById('admin-panel').style.display = 'none'; }
 
-    function downloadWithVoucher() {
-        const btn = event.currentTarget;
-        btn.innerText = "鑑定書生成中...";
-        html2canvas(document.getElementById('capture-area'), {
-            scale: 3,
-            useCORS: true,
-            backgroundColor: null
-        }).then(canvas => {
-            const link = document.createElement('a');
-            link.download = `植物鑑定報告-${document.getElementById('user-name').value}.png`;
-            link.href = canvas.toDataURL('image/png');
-            link.click();
-            btn.innerText = "下載鑑定書與憑證";
-            document.getElementById('success-modal').classList.remove('hidden');
-        });
-    }
+        async function renderAdminData() {
+            adminData = await window.apiFetchAdminData();
+            renderStats();
+        }
 
-    // 重新測驗邏輯
-    function resetQuiz() {
-        currentQ = 0;
-        scores = { flower:0, leaf:0, wood:0, resin:0, fruit:0, seed:0, root:0, spice:0, herb:0 };
-        history = [];
-        document.getElementById('user-name').value = '';
-        document.getElementById('result-screen').classList.add('hidden');
-        document.getElementById('start-screen').classList.remove('hidden');
-        window.scrollTo(0,0);
-    }
+        function renderStats() {
+            const stats = currentView === 'weekly' ? adminData.weeklyStats : adminData.totalStats;
+            // 修正：確保監控中心的數值能正確對應到 Firestore 文檔欄位
+            document.getElementById('stat-visits').innerText = stats.visitCount || 0;
+            document.getElementById('stat-completes').innerText = stats.completeCount || 0;
+            document.getElementById('stat-form-clicks').innerText = stats.formClickCount || 0;
+            const drops = (stats.visitCount || 0) - (stats.completeCount || 0);
+            document.getElementById('stat-drops').innerText = drops > 0 ? drops : 0;
 
-    function closeModal() {
-        document.getElementById('success-modal').classList.add('hidden');
-    }
-</script>
-```
+            const pBox = document.getElementById('personality-list'); pBox.innerHTML = '';
+            Object.values(resultsDesc).forEach(r => {
+                const count = stats[`type_${r.name}`] || 0;
+                pBox.innerHTML += `<div class="stat-list-item"><span>${r.icon} ${r.name}</span><strong>${count} 次</strong></div>`;
+            });
 
+            const platBox = document.getElementById('platform-list'); platBox.innerHTML = '';
+            ["Facebook", "Instagram", "Google", "Threads", "直接進入/Line", "其他平台"].forEach(p => {
+                const count = stats[`platform_${p}`] || 0;
+                platBox.innerHTML += `<div class="stat-list-item"><span>${p}</span><strong>${count} 次</strong></div>`;
+            });
+
+            const body = document.getElementById('admin-data-body');
+            body.innerHTML = adminData.results.length ? '' : '<tr><td colspan="5" class="text-center p-4">名單已清空</td></tr>';
+            adminData.results.forEach(i => {
+                const time = i.updatedAt ? new Date(i.updatedAt.seconds * 1000).toLocaleString() : 'N/A';
+                body.innerHTML += `<tr><td>${time}</td><td>${i.userName}</td><td>${i.resultType}</td><td>${i.essentialOil}</td><td>${i.platform}</td></tr>`;
+            });
+        }
+
+        function showConfirmModal() { document.getElementById('confirm-modal').style.display = 'flex'; }
+        function hideConfirmModal() { document.getElementById('confirm-modal').style.display = 'none'; }
+        async function confirmClearAction() {
+            hideConfirmModal();
+            await window.apiClearWeeklyData();
+            renderAdminData();
+        }
+
+        function exportCSV() {
+            if(!adminData.results.length) return;
+            let csv = "\uFEFF測驗時間,姓名,人格,精油,來源平台\n";
+            adminData.results.forEach(i => {
+                const time = i.updatedAt ? new Date(i.updatedAt.seconds * 1000).toLocaleString().replace(/,/g,'') : 'N/A';
+                csv += `${time},${i.userName},${i.resultType},${i.essentialOil},${i.platform}\n`;
+            });
+            const blob = new Blob([csv], {type: 'text/csv'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `數據_${new Date().toLocaleDateString()}.csv`; a.click();
+        }
+    </script>
 </body>
 </html>
